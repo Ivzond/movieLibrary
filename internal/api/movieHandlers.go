@@ -4,7 +4,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
+	"movieLibrary/internal/helpers"
+	"movieLibrary/internal/pkg/validation"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 type MovieRequest struct {
@@ -17,9 +21,17 @@ type MovieRequest struct {
 
 func createMovieHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if helpers.GetRoleFromContext(r.Context()) != "admin" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 		var movieReq MovieRequest
 		if err := json.NewDecoder(r.Body).Decode(&movieReq); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if !validation.Name(movieReq.Name) || !validation.Description(movieReq.Description) || !validation.Rating(movieReq.Rating) {
+			http.Error(w, "Bad request body", http.StatusBadRequest)
 			return
 		}
 
@@ -71,6 +83,10 @@ func createMovieHandler(db *sql.DB) http.HandlerFunc {
 
 func updateMovieHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if helpers.GetRoleFromContext(r.Context()) != "admin" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 		var movieReq MovieRequest
 		if err := json.NewDecoder(r.Body).Decode(&movieReq); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -97,24 +113,41 @@ func updateMovieHandler(db *sql.DB) http.HandlerFunc {
 
 		var queryArgs []interface{}
 		updateQuery := "UPDATE movies SET"
+		pIndex := 1
 		if movieReq.Name != "" {
-			updateQuery += " name=$1,"
+			if !validation.Name(movieReq.Name) {
+				http.Error(w, "Invalid movie name", http.StatusBadRequest)
+				return
+			}
+			updateQuery += " name=$" + strconv.Itoa(pIndex) + ","
 			queryArgs = append(queryArgs, movieReq.Name)
+			pIndex++
 		}
 		if movieReq.Description != "" {
-			updateQuery += " description=$2,"
+			if !validation.Description(movieReq.Description) {
+				http.Error(w, "Invalid movie description", http.StatusBadRequest)
+				return
+			}
+			updateQuery += " description=$" + strconv.Itoa(pIndex) + ","
 			queryArgs = append(queryArgs, movieReq.Description)
+			pIndex++
 		}
 		if movieReq.ReleaseDate != "" {
-			updateQuery += " release_date=$3,"
+			updateQuery += " release_date=$" + strconv.Itoa(pIndex) + ","
 			queryArgs = append(queryArgs, movieReq.ReleaseDate)
+			pIndex++
 		}
 		if movieReq.Rating != "" {
-			updateQuery += " rating=$4,"
+			if !validation.Rating(movieReq.Rating) {
+				http.Error(w, "Invalid movie rating", http.StatusBadRequest)
+				return
+			}
+			updateQuery += " rating=$" + strconv.Itoa(pIndex) + ","
 			queryArgs = append(queryArgs, movieReq.Rating)
+			pIndex++
 		}
 
-		updateQuery = updateQuery[:len(updateQuery)-1] + " WHERE movie_id=$5"
+		updateQuery = strings.TrimSuffix(updateQuery, ",") + " WHERE movie_id=$" + strconv.Itoa(pIndex)
 		queryArgs = append(queryArgs, r.URL.Query().Get("id"))
 
 		_, err = tx.Exec(updateQuery, queryArgs...)
@@ -153,6 +186,10 @@ func updateMovieHandler(db *sql.DB) http.HandlerFunc {
 
 func deleteMovieHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if helpers.GetRoleFromContext(r.Context()) != "admin" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 		_, err := db.Exec("DELETE FROM movies_actors WHERE movie_id=$1", r.URL.Query().Get("id"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -221,6 +258,55 @@ func getMoviesHandler(db *sql.DB) http.HandlerFunc {
 
 func searchMoviesHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query().Get("query")
+		rows, err := db.Query(
+			`SELECT m.movie_id, m.name, m.description, m.release_date, m.rating, 
+       				(
+						SELECT array_to_json(array_agg(a.name))
+						FROM actors a
+						JOIN movies_actors ma ON a.actor_id = ma.actor_id
+						WHERE ma.movie_id=m.movie_id
+       				) AS actors
+					FROM movies m
+					WHERE m.name ILIKE '%' || $1 || '%' OR
+					    EXISTS(
+					        SELECT 1
+					        FROM actors a
+					        JOIN movies_actors ma ON a.actor_id = ma.actor_id
+					        WHERE ma.movie_id = m.movie_id AND a.name ILIKE '%' || $1 || '%'
+					    )
+				`, query)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
 
+		var movies []MovieResponse
+		for rows.Next() {
+			var movie MovieResponse
+			var actorsJSON []byte
+			if err := rows.Scan(&movie.ID, &movie.Name, &movie.Description, &movie.ReleaseDate, &movie.Rating, &actorsJSON); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			var actors []string
+			if err := json.Unmarshal(actorsJSON, &actors); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			movie.Actors = actors
+			movies = append(movies, movie)
+		}
+		if len(movies) == 0 {
+			http.NotFound(w, r)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		json.NewEncoder(w).Encode(movies)
+
+		log.Printf("Received request to search movies with query: %s\n", query)
 	}
 }

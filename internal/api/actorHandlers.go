@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
+	"movieLibrary/internal/helpers"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,6 +18,10 @@ type ActorRequest struct {
 
 func createActorHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if helpers.GetRoleFromContext(r.Context()) != "admin" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 		var actorReq ActorRequest
 		if err := json.NewDecoder(r.Body).Decode(&actorReq); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -38,6 +43,10 @@ func createActorHandler(db *sql.DB) http.HandlerFunc {
 
 func updateActorHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if helpers.GetRoleFromContext(r.Context()) != "admin" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 		var actorReq ActorRequest
 		if err := json.NewDecoder(r.Body).Decode(&actorReq); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -80,6 +89,10 @@ func updateActorHandler(db *sql.DB) http.HandlerFunc {
 
 func deleteActorHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if helpers.GetRoleFromContext(r.Context()) != "admin" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 		_, err := db.Exec("DELETE FROM actors WHERE actor_id=$1", r.URL.Query().Get("id"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -94,7 +107,12 @@ func deleteActorHandler(db *sql.DB) http.HandlerFunc {
 
 func getActorsHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query("SELECT actor_id, name, sex, date_of_birth FROM actors")
+		rows, err := db.Query(`SELECT a.actor_id, a.name, a.sex, a.date_of_birth,
+       			array_to_json(array_agg(m.name))
+			FROM actors a 
+			JOIN movies_actors ma ON a.actor_id = ma.actor_id
+    		JOIN movies m ON ma.movie_id = m.movie_id
+			GROUP BY a.actor_id`)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -104,10 +122,18 @@ func getActorsHandler(db *sql.DB) http.HandlerFunc {
 		var actors []ActorResponse
 		for rows.Next() {
 			var actor ActorResponse
-			if err := rows.Scan(&actor.ID, &actor.Name, &actor.Sex, &actor.DateOfBirth); err != nil {
+			var moviesJSON []byte
+			if err := rows.Scan(&actor.ID, &actor.Name, &actor.Sex, &actor.DateOfBirth, &moviesJSON); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+			var movies []string
+			if err := json.Unmarshal(moviesJSON, &movies); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			actor.Movies = movies
 			actors = append(actors, actor)
 		}
 

@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"movieLibrary/internal/pkg/helpers"
 )
 
 const (
@@ -24,6 +25,7 @@ func InitDB() (*sql.DB, error) {
 	)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
+		helpers.ErrorLogger.Println("Error on connection to database:", err)
 		return nil, err
 	}
 	return db, err

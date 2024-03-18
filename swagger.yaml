@@ -1,0 +1,272 @@
+swagger: "2.0"
+info:
+  title: Movie Library API
+  description: API for managing movies and actors
+  version: "1.0.0"
+host: localhost:8080
+basePath: /
+schemes:
+  - http
+paths:
+  /actors/create:
+    post:
+      summary: Create a new actor
+      tags:
+        - Actors
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/ActorRequest"
+      responses:
+        201:
+          description: Actor created successfully
+        400:
+          description: Bad request
+        401:
+          description: Unauthorized
+        500:
+          description: Internal server error
+
+  /actors/update:
+    put:
+      summary: Update an existing actor
+      tags:
+        - Actors
+      parameters:
+        - name: id
+          in: query
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/ActorRequest"
+      responses:
+        200:
+          description: Actor updated successfully
+        400:
+          description: Bad request
+        401:
+          description: Unauthorized
+        500:
+          description: Internal server error
+
+  /actors/delete:
+    delete:
+      summary: Delete an existing actor
+      tags:
+        - Actors
+      parameters:
+        - name: id
+          in: query
+          required: true
+          type: string
+      responses:
+        200:
+          description: Actor deleted successfully
+        401:
+          description: Unauthorized
+        500:
+          description: Internal server error
+
+  /actors:
+    get:
+      summary: Get all actors with their associated movies
+      tags:
+        - Actors
+      responses:
+        200:
+          description: List of actors with associated movies
+          schema:
+            type: array
+            items:
+              $ref: "#/definitions/ActorResponse"
+        401:
+          description: Unauthorized
+        500:
+          description: Internal server error
+
+  /movies/create:
+    post:
+      summary: Create a new movie
+      tags:
+        - Movies
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/MovieRequest"
+      responses:
+        201:
+          description: Movie created successfully
+        400:
+          description: Bad request
+        401:
+          description: Unauthorized
+        500:
+          description: Internal server error
+
+  /movies/update:
+    put:
+      summary: Update an existing movie
+      tags:
+        - Movies
+      parameters:
+        - name: id
+          in: query
+          required: true
+          type: string
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/MovieRequest"
+      responses:
+        200:
+          description: Movie updated successfully
+        400:
+          description: Bad request
+        401:
+          description: Unauthorized
+        500:
+          description: Internal server error
+
+  /movies/delete:
+    delete:
+      summary: Delete an existing movie
+      tags:
+        - Movies
+      parameters:
+        - name: id
+          in: query
+          required: true
+          type: string
+      responses:
+        200:
+          description: Movie deleted successfully
+        401:
+          description: Unauthorized
+        500:
+          description: Internal server error
+
+  /movies:
+    get:
+      summary: Get all movies with their associated actors
+      tags:
+        - Movies
+      parameters:
+        - name: sort
+          in: query
+          required: false
+          type: string
+          enum: [title, release_date]
+          default: rating
+      responses:
+        200:
+          description: List of movies with associated actors
+          schema:
+            type: array
+            items:
+              $ref: "#/definitions/MovieResponse"
+        401:
+          description: Unauthorized
+        500:
+          description: Internal server error
+
+  /movies/search:
+    get:
+      summary: Search for movies by title or actor name
+      tags:
+        - Movies
+      parameters:
+        - name: query
+          in: query
+          required: true
+          type: string
+      responses:
+        200:
+          description: List of movies matching the search query
+          schema:
+            type: array
+            items:
+              $ref: "#/definitions/MovieResponse"
+        404:
+          description: No movies found
+        500:
+          description: Internal server error
+
+definitions:
+  ActorRequest:
+    type: object
+    properties:
+      name:
+        type: string
+      sex:
+        type: string
+      date_of_birth:
+        type: string
+    required:
+      - name
+
+  ActorResponse:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      sex:
+        type: string
+      date_of_birth:
+        type: string
+      movies:
+        type: array
+        items:
+          type: string
+
+  MovieRequest:
+    type: object
+    properties:
+      name:
+        type: string
+      description:
+        type: string
+      release_date:
+        type: string
+      rating:
+        type: string
+      actors:
+        type: array
+        items:
+          type: string
+    required:
+      - name
+      - description
+      - release_date
+      - rating
+
+  MovieResponse:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      description:
+        type: string
+      release_date:
+        type: string
+      rating:
+        type: number
+      actors:
+        type: array
+        items:
+          type: string
+
+securityDefinitions:
+  basicAuth:
+    type: basic

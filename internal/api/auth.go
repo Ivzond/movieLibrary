@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"movieLibrary/internal/pkg/helpers"
 	"net/http"
 	"strings"
 )
@@ -26,6 +27,7 @@ func BasicAuthMiddleware(db *sql.DB, next http.HandlerFunc) http.HandlerFunc {
 		payload, err := base64.StdEncoding.DecodeString(auth[1])
 		if err != nil {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			helpers.ErrorLogger.Println("Error decoding payload on authentication:", err)
 			return
 		}
 
@@ -42,6 +44,7 @@ func BasicAuthMiddleware(db *sql.DB, next http.HandlerFunc) http.HandlerFunc {
 		role, err := authenticateUser(db, username, password)
 		if err != nil {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			helpers.ErrorLogger.Println("Error authenticating user:", err)
 			return
 		}
 

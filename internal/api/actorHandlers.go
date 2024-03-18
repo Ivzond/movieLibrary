@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
-	"movieLibrary/internal/helpers"
+	helpers2 "movieLibrary/internal/pkg/helpers"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,13 +18,14 @@ type ActorRequest struct {
 
 func createActorHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if helpers.GetRoleFromContext(r.Context()) != "admin" {
+		if helpers2.GetRoleFromContext(r.Context()) != "admin" {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 		var actorReq ActorRequest
 		if err := json.NewDecoder(r.Body).Decode(&actorReq); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			helpers2.ErrorLogger.Println("Error decoding actor request on creating:", err)
 			return
 		}
 
@@ -32,6 +33,7 @@ func createActorHandler(db *sql.DB) http.HandlerFunc {
 			actorReq.Name, actorReq.Sex, actorReq.DateOfBirth)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			helpers2.ErrorLogger.Println("Error executing SQL query on creating actor:", err)
 			return
 		}
 
@@ -43,13 +45,14 @@ func createActorHandler(db *sql.DB) http.HandlerFunc {
 
 func updateActorHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if helpers.GetRoleFromContext(r.Context()) != "admin" {
+		if helpers2.GetRoleFromContext(r.Context()) != "admin" {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 		var actorReq ActorRequest
 		if err := json.NewDecoder(r.Body).Decode(&actorReq); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			helpers2.ErrorLogger.Println("Error decoding actor request on updating:", err)
 			return
 		}
 
@@ -78,6 +81,7 @@ func updateActorHandler(db *sql.DB) http.HandlerFunc {
 		_, err := db.Exec(updateQuery, queryArgs...)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			helpers2.ErrorLogger.Println("Error executing SQL query on updating actor:", err)
 			return
 		}
 
@@ -89,13 +93,14 @@ func updateActorHandler(db *sql.DB) http.HandlerFunc {
 
 func deleteActorHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if helpers.GetRoleFromContext(r.Context()) != "admin" {
+		if helpers2.GetRoleFromContext(r.Context()) != "admin" {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 		_, err := db.Exec("DELETE FROM actors WHERE actor_id=$1", r.URL.Query().Get("id"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			helpers2.ErrorLogger.Println("Error executing SQL query on deleting actor:", err)
 			return
 		}
 
@@ -115,6 +120,7 @@ func getActorsHandler(db *sql.DB) http.HandlerFunc {
 			GROUP BY a.actor_id`)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			helpers2.ErrorLogger.Println("Error executing SQL query on reading actors:", err)
 			return
 		}
 		defer rows.Close()
@@ -125,11 +131,13 @@ func getActorsHandler(db *sql.DB) http.HandlerFunc {
 			var moviesJSON []byte
 			if err := rows.Scan(&actor.ID, &actor.Name, &actor.Sex, &actor.DateOfBirth, &moviesJSON); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				helpers2.ErrorLogger.Println("Error scanning rows:", err)
 				return
 			}
 			var movies []string
 			if err := json.Unmarshal(moviesJSON, &movies); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				helpers2.ErrorLogger.Println("Error unmarshalling movies JSON:", err)
 				return
 			}
 
@@ -138,7 +146,11 @@ func getActorsHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(actors)
+		if err := json.NewEncoder(w).Encode(actors); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			helpers2.ErrorLogger.Println("Error encoding actors response:", err)
+			return
+		}
 
 		log.Println("Received request to get actors")
 	}

@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	_ "github.com/lib/pq"
 	"log"
-	"movieLibrary/helpers"
 	"movieLibrary/internal/api"
 	"movieLibrary/internal/database"
+	"movieLibrary/internal/pkg/helpers"
 	"net/http"
 )
 

@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
-	"movieLibrary/internal/helpers"
+	helpers2 "movieLibrary/internal/pkg/helpers"
 	"movieLibrary/internal/pkg/validation"
 	"net/http"
 	"strconv"
@@ -21,13 +21,14 @@ type MovieRequest struct {
 
 func createMovieHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if helpers.GetRoleFromContext(r.Context()) != "admin" {
+		if helpers2.GetRoleFromContext(r.Context()) != "admin" {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 		var movieReq MovieRequest
 		if err := json.NewDecoder(r.Body).Decode(&movieReq); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			helpers2.ErrorLogger.Println("Error decoding request body on creating movie:", err)
 			return
 		}
 		if !validation.Name(movieReq.Name) || !validation.Description(movieReq.Description) || !validation.Rating(movieReq.Rating) {
@@ -38,17 +39,20 @@ func createMovieHandler(db *sql.DB) http.HandlerFunc {
 		tx, err := db.Begin()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			helpers2.ErrorLogger.Println("Error starting transaction:", err)
 			return
 		}
 		defer func() {
 			if err != nil {
 				tx.Rollback()
+				helpers2.ErrorLogger.Println("Transaction rolled back:", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 			err = tx.Commit()
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				helpers2.ErrorLogger.Println("Error committing transaction:", err)
 				return
 			}
 		}()
@@ -58,6 +62,7 @@ func createMovieHandler(db *sql.DB) http.HandlerFunc {
 		err = tx.QueryRow(insertQuery, movieReq.Name, movieReq.Description, movieReq.ReleaseDate, movieReq.Rating).Scan(&movieID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			helpers2.ErrorLogger.Println("Error inserting movie into database:", err)
 			return
 		}
 
@@ -66,12 +71,14 @@ func createMovieHandler(db *sql.DB) http.HandlerFunc {
 			err := db.QueryRow("SELECT actor_id FROM actors WHERE name = $1", actorName).Scan(&actorID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				helpers2.ErrorLogger.Println("Error getting actor ID from database:", err)
 				return
 			}
 
 			_, err = tx.Exec("INSERT INTO movies_actors (movie_id, actor_id) VALUES ($1,$2)", movieID, actorID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				helpers2.ErrorLogger.Println("Error inserting movie actor into database:", err)
 				return
 			}
 		}
@@ -83,30 +90,34 @@ func createMovieHandler(db *sql.DB) http.HandlerFunc {
 
 func updateMovieHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if helpers.GetRoleFromContext(r.Context()) != "admin" {
+		if helpers2.GetRoleFromContext(r.Context()) != "admin" {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 		var movieReq MovieRequest
 		if err := json.NewDecoder(r.Body).Decode(&movieReq); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			helpers2.ErrorLogger.Println("Error decoding request body:", err)
 			return
 		}
 
 		tx, err := db.Begin()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			helpers2.ErrorLogger.Println("Error starting transaction:", err)
 			return
 		}
 		defer func() {
 			if err != nil {
 				tx.Rollback()
+				helpers2.ErrorLogger.Println("Transaction rolled back:", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 			err = tx.Commit()
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				helpers2.ErrorLogger.Println("Error committing transaction:", err)
 				return
 			}
 		}()
@@ -153,6 +164,7 @@ func updateMovieHandler(db *sql.DB) http.HandlerFunc {
 		_, err = tx.Exec(updateQuery, queryArgs...)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			helpers2.ErrorLogger.Println("Error updating movie in database:", err)
 			return
 		}
 
@@ -160,6 +172,7 @@ func updateMovieHandler(db *sql.DB) http.HandlerFunc {
 			_, err := tx.Exec("DELETE FROM movies_actors WHERE movie_id = $1", r.URL.Query().Get("id"))
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				helpers2.ErrorLogger.Println("Error deleting movie actors from database:", err)
 				return
 			}
 
@@ -168,12 +181,14 @@ func updateMovieHandler(db *sql.DB) http.HandlerFunc {
 				err := db.QueryRow("SELECT actor_id FROM actors WHERE name=$1", actorName).Scan(&actorID)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
+					log.Println("Error getting actor ID from database:", err)
 					return
 				}
 
 				_, err = tx.Exec("INSERT INTO movies_actors (movie_id, actor_id) VALUES ($1, $2)", r.URL.Query().Get("id"), actorID)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
+					log.Println("Error inserting movie actor into database:", err)
 					return
 				}
 			}
@@ -186,18 +201,20 @@ func updateMovieHandler(db *sql.DB) http.HandlerFunc {
 
 func deleteMovieHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if helpers.GetRoleFromContext(r.Context()) != "admin" {
+		if helpers2.GetRoleFromContext(r.Context()) != "admin" {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 		_, err := db.Exec("DELETE FROM movies_actors WHERE movie_id=$1", r.URL.Query().Get("id"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			helpers2.ErrorLogger.Println("Error deleting movie actors from database:", err)
 			return
 		}
 		_, err = db.Exec("DELETE FROM movies WHERE movie_id=$1", r.URL.Query().Get("id"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			helpers2.ErrorLogger.Println("Error deleting movie from database:", err)
 			return
 		}
 
@@ -228,6 +245,7 @@ func getMoviesHandler(db *sql.DB) http.HandlerFunc {
 			ORDER BY ` + orderBy + ` DESC`)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			helpers2.ErrorLogger.Println("Error getting movies from database:", err)
 			return
 		}
 		defer rows.Close()
@@ -238,11 +256,13 @@ func getMoviesHandler(db *sql.DB) http.HandlerFunc {
 			var actorsJSON []byte
 			if err := rows.Scan(&movie.ID, &movie.Name, &movie.Description, &movie.ReleaseDate, &movie.Rating, &actorsJSON); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				helpers2.ErrorLogger.Println("Error scanning movies from database:", err)
 				return
 			}
 			var actors []string
 			if err := json.Unmarshal(actorsJSON, &actors); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				helpers2.ErrorLogger.Println("Error unmarshalling actors JSON:", err)
 				return
 			}
 			movie.Actors = actors
@@ -278,6 +298,7 @@ func searchMoviesHandler(db *sql.DB) http.HandlerFunc {
 				`, query)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			helpers2.ErrorLogger.Println("Error searching movies in database:", err)
 			return
 		}
 		defer rows.Close()
@@ -288,11 +309,13 @@ func searchMoviesHandler(db *sql.DB) http.HandlerFunc {
 			var actorsJSON []byte
 			if err := rows.Scan(&movie.ID, &movie.Name, &movie.Description, &movie.ReleaseDate, &movie.Rating, &actorsJSON); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				helpers2.ErrorLogger.Println("Error scanning searched movies from database:", err)
 				return
 			}
 			var actors []string
 			if err := json.Unmarshal(actorsJSON, &actors); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
+				helpers2.ErrorLogger.Println("Error unmarshalling actors JSON in searched movies:", err)
 				return
 			}
 			movie.Actors = actors

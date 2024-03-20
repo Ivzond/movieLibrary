@@ -7,11 +7,11 @@ import (
 )
 
 const (
-	DBHost     = "localhost"
+	DBHost     = "db"
 	DBPort     = "5432"
 	DBUser     = "postgres"
 	DBPassword = "12345678"
-	DBName     = "movieLibrary"
+	DBName     = "movie_library"
 )
 
 func InitDB() (*sql.DB, error) {

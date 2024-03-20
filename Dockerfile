@@ -1,4 +1,4 @@
-FROM golang:1.21.6 AS builder
+FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
 
@@ -10,12 +10,6 @@ RUN go mod download
 COPY . .
 
 RUN go build -o movie_library .
-
-FROM alpine:latest
-
-WORKDIR /app
-
-COPY --from=builder /app/movie_library .
 
 EXPOSE 8080
 

@@ -2,23 +2,22 @@ version: '3.3'
 
 services:
   app:
-    image: ivzond/movie_library
+    image: movie_library
     ports:
       - "8080:8080"
     depends_on:
       - db
     command: sh -c "sleep 1 && ./movie_library"
     environment:
-      - DATABASE_URL=postgres://postgres:12345678@db:5432/bankapp?sslmode=disable
+      - DATABASE_URL=postgres://postgres:12345678@db:5432/movie_library?sslmode=disable
 
   db:
     image: postgres:latest
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 12345678
-      POSTGRES_DB: movieLibrary
+      POSTGRES_DB: movie_library
     ports:
       - "5432:5432"
     volumes:
-      - /home/vano/movieTheatre:/var/lib/postgresql/data
       - ./init:/docker-entrypoint-initdb.d
